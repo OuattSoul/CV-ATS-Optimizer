@@ -45,4 +45,10 @@ export interface OptimizationResult {
   finalCV: FinalCV;
 }
 
-export type AppStage = 'INPUT' | 'LOADING' | 'RESULT';
+export interface HistoryItem {
+  id: string;
+  timestamp: number;
+  result: OptimizationResult;
+}
+
+export type AppStage = 'INPUT' | 'LOADING' | 'RESULT' | 'HISTORY';

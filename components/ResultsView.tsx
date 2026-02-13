@@ -1,6 +1,8 @@
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { OptimizationResult } from '../types';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface ResultsViewProps {
   result: OptimizationResult;
@@ -21,6 +23,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode; icon?: strin
 
 const ResultsView: React.FC<ResultsViewProps> = ({ result, onReset }) => {
   const { atsScore, atsAnalysis, cvAudit, recommendations, advancedTips, finalCV } = result;
+  const cvRef = useRef<HTMLDivElement>(null);
 
   const copyToClipboard = () => {
     const cvText = `
@@ -47,6 +50,38 @@ ${finalCV.toolsAndTech.join(' | ')}
     
     navigator.clipboard.writeText(cvText);
     alert('CV copié dans le presse-papier !');
+  };
+
+  const downloadPDF = async () => {
+    if (!cvRef.current) return;
+    
+    const btn = document.getElementById('download-btn');
+    const originalText = btn?.innerHTML || '';
+    if (btn) btn.innerHTML = '<span class="animate-spin">⏳</span> Génération...';
+
+    try {
+      const canvas = await html2canvas(cvRef.current, {
+        scale: 3, // High DPI for clear printing
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+      pdf.save(`CV_Optimise_${finalCV.optimizedTitle.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Une erreur est survenue lors de la génération du PDF.');
+    } finally {
+      if (btn) btn.innerHTML = originalText;
+    }
   };
 
   const getScoreColor = (score: number) => {
@@ -206,17 +241,26 @@ ${finalCV.toolsAndTech.join(' | ')}
         </div>
       </Section>
 
-      <div className="mt-12 mb-8 flex items-center justify-between">
+      <div className="mt-12 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
          <h2 className="text-2xl font-bold text-slate-900">5. Version Finale Optimisée (ATS Ready)</h2>
-         <button 
-           onClick={copyToClipboard}
-           className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2"
-         >
-           📋 Copier le CV Texte
-         </button>
+         <div className="flex gap-3">
+           <button 
+             onClick={copyToClipboard}
+             className="bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+           >
+             📋 Copier Texte
+           </button>
+           <button 
+             id="download-btn"
+             onClick={downloadPDF}
+             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all flex items-center gap-2"
+           >
+             📥 Télécharger PDF
+           </button>
+         </div>
       </div>
 
-      <div className="bg-white border-2 border-slate-200 rounded-lg p-10 font-mono text-xs leading-relaxed text-slate-800 shadow-2xl relative">
+      <div ref={cvRef} className="bg-white border-2 border-slate-200 rounded-lg p-10 font-mono text-xs leading-relaxed text-slate-800 shadow-2xl relative overflow-hidden">
         <div className="absolute top-4 right-4 text-[10px] text-slate-400 uppercase font-bold tracking-widest">Format ATS Strict</div>
         
         <div className="text-center mb-8">
@@ -238,4 +282,49 @@ ${finalCV.toolsAndTech.join(' | ')}
           <h2 className="font-bold border-b border-slate-300 pb-1 mb-2 uppercase text-[11px]">Expériences Professionnelles</h2>
           {finalCV.professionalExperience.map((exp, i) => (
             <div key={i} className="mb-4">
-              <div className="flex justify
+              <div className="flex justify-between font-bold text-[11px]">
+                <span>{exp.role} @ {exp.company}</span>
+                <span>{exp.period}</span>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {exp.bullets.map((b, bi) => (
+                  <li key={bi} className="pl-4 relative">
+                    <span className="absolute left-0">-</span>
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {finalCV.projects && finalCV.projects.length > 0 && (
+          <div className="mb-6">
+            <h2 className="font-bold border-b border-slate-300 pb-1 mb-2 uppercase text-[11px]">Projets</h2>
+            <ul className="space-y-1">
+              {finalCV.projects.map((p, i) => <li key={i}>- {p}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <div className="mb-6">
+          <h2 className="font-bold border-b border-slate-300 pb-1 mb-2 uppercase text-[11px]">Formation</h2>
+          <ul className="space-y-1">
+            {finalCV.education.map((e, i) => <li key={i}>{e}</li>)}
+          </ul>
+        </div>
+
+        <div>
+          <h2 className="font-bold border-b border-slate-300 pb-1 mb-2 uppercase text-[11px]">Technologies / Outils</h2>
+          <p>{finalCV.toolsAndTech.join(' | ')}</p>
+        </div>
+      </div>
+
+      <div className="mt-8 text-center text-slate-400 text-xs italic">
+        Note: Ce format est optimisé pour être lu sans erreur par 99% des logiciels de tri (ATS).
+      </div>
+    </div>
+  );
+};
+
+export default ResultsView;

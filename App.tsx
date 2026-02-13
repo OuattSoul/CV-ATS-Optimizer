@@ -1,16 +1,37 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import CVForm from './components/CVForm';
 import LoadingScreen from './components/LoadingScreen';
 import ResultsView from './components/ResultsView';
+import HistoryView from './components/HistoryView';
 import { optimizeCV } from './services/geminiService';
-import { AppStage, OptimizationResult } from './types';
+import { AppStage, OptimizationResult, HistoryItem } from './types';
+
+const STORAGE_KEY = 'cv_optimizer_history';
 
 const App: React.FC = () => {
   const [stage, setStage] = useState<AppStage>('INPUT');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<OptimizationResult | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  // Load history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse history", e);
+      }
+    }
+  }, []);
+
+  // Save history on change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
 
   const handleOptimize = async (cv: string, jd: string) => {
     setStage('LOADING');
@@ -18,6 +39,15 @@ const App: React.FC = () => {
     try {
       const data = await optimizeCV(cv, jd);
       setResult(data);
+      
+      // Save to history
+      const newItem: HistoryItem = {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        result: data
+      };
+      setHistory(prev => [newItem, ...prev]);
+      
       setStage('RESULT');
     } catch (err) {
       console.error(err);
@@ -32,11 +62,34 @@ const App: React.FC = () => {
     setError(null);
   };
 
+  const handleOpenHistoryItem = (item: HistoryItem) => {
+    setResult(item.result);
+    setStage('RESULT');
+  };
+
+  const handleDeleteHistoryItem = (id: string) => {
+    setHistory(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleClearHistory = () => {
+    if (window.confirm("Êtes-vous sûr de vouloir supprimer tout votre historique ?")) {
+      setHistory([]);
+    }
+  };
+
   return (
     <Layout>
       {stage === 'INPUT' && (
         <div className="animate-fade-in">
-          <div className="text-center mb-12">
+          <div className="text-center mb-12 relative">
+            {history.length > 0 && (
+              <button 
+                onClick={() => setStage('HISTORY')}
+                className="absolute right-0 top-0 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-full text-sm font-bold shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+              >
+                📜 Historique ({history.length})
+              </button>
+            )}
             <h2 className="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">
               Passez le filtre des <span className="text-indigo-600">algorithmes ATS</span>
             </h2>
@@ -78,6 +131,16 @@ const App: React.FC = () => {
 
       {stage === 'RESULT' && result && (
         <ResultsView result={result} onReset={handleReset} />
+      )}
+
+      {stage === 'HISTORY' && (
+        <HistoryView 
+          history={history}
+          onSelect={handleOpenHistoryItem}
+          onDelete={handleDeleteHistoryItem}
+          onClear={handleClearHistory}
+          onBack={handleReset}
+        />
       )}
 
       <style>{`
